@@ -1,0 +1,444 @@
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 20, 23, 0.7);
+  backdrop-filter: blur(12px);
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #22c55e);
+}
+
+.title {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.subtitle {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.9), rgba(34, 197, 94, 0.9));
+  border-color: transparent;
+  color: #0b0b0d;
+}
+
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  min-height: 0;
+}
+
+.settings {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.panelTitle {
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 650;
+  margin-bottom: 6px;
+  opacity: 0.9;
+}
+
+.hint {
+  font-size: 12px;
+  opacity: 0.7;
+  word-break: break-all;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+/*
+  On Windows/Chromium, <select> dropdown menus often render with a light background
+  while inheriting our dark-theme text color, making options appear blank.
+*/
+.select option {
+  background: #ffffff;
+  color: #0b0b0d;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 14px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cardTitle {
+  font-weight: 700;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn.small {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.tab {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab.active {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(124, 58, 237, 0.45);
+}
+
+.cardBody {
+  margin-top: 10px;
+}
+
+.list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.listMain {
+  min-width: 0;
+}
+
+.listTitle {
+  font-weight: 700;
+}
+
+.listSub {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.listErr {
+  color: #ffb4b4;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pill.connected {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.pill.failed {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.pill.needs_auth,
+.pill.needs_client_registration {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.toolList {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolRow {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.toolId {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.toolDesc {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+  line-height: 1.35;
+}
+
+.error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px;
+}
+
+.mcpPanelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mcpPanelTitle {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mcpPanelBody {
+  margin-top: 8px;
+}
+
+.pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: auto;
+  max-height: 240px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.muted {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.errorText {
+  color: #ff6b6b;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty {
+  margin: auto;
+  max-width: 520px;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.emptyTitle {
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.emptyHint {
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.msg {
+  display: flex;
+}
+
+.msg.user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: min(760px, 92%);
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.msg.user .bubble {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+.role {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 20, 23, 0.5);
+}
+
+.composerInput {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 12px;
+  padding: 12px 12px;
+  outline: none;
+  resize: none;
+}
+
+@media (max-width: 980px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+  .settings {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}

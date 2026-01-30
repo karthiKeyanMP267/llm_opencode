@@ -1,0 +1,4 @@
+# dependencies
+node_modules/
+
+# optional: lockfiles in subprojects (kept)
