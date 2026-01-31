@@ -414,6 +414,116 @@
   line-height: 1.45;
 }
 
+.formattedList {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formattedList li {
+  margin: 0;
+}
+
+.structuredBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.structuredIntro :is(p, ul, ol) {
+  margin: 0 0 8px;
+}
+
+.formattedTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.formattedTable th,
+.formattedTable td {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.formattedTable th {
+  background: rgba(124, 58, 237, 0.2);
+  font-weight: 700;
+}
+
+.formattedTable tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.toolCalls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolCallsTitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.toolCallsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolCall {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+}
+
+.toolCall.pending {
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.toolCall.running {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.toolCall.completed {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.toolCall.error {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.toolName {
+  font-weight: 700;
+}
+
+.toolTitle {
+  opacity: 0.75;
+}
+
+.toolStatus {
+  margin-left: auto;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
 .composer {
   display: flex;
   gap: 10px;

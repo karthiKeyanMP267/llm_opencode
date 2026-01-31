@@ -33,6 +33,7 @@ let opencodeBaseUrl;
 const mcpConfigStore = new Map();
 let mcpWatcherStarted = false;
 let mcpSyncInFlight = null;
+let mcpToolPolicy = null;
 
 function debounce(fn, delayMs) {
   let t = null;
@@ -47,6 +48,7 @@ async function loadMcpStore({ replace = false } = {}) {
     const raw = await fs.readFile(MCP_STORE_PATH, "utf8");
     const json = JSON.parse(raw);
     const servers = json?.servers;
+    const tools = json?.tools;
     if (servers && typeof servers === "object") {
       if (replace) mcpConfigStore.clear();
       for (const [name, config] of Object.entries(servers)) {
@@ -54,6 +56,11 @@ async function loadMcpStore({ replace = false } = {}) {
           mcpConfigStore.set(name, config);
         }
       }
+    }
+    if (tools && typeof tools === "object" && !Array.isArray(tools)) {
+      mcpToolPolicy = { ...tools };
+    } else if (replace) {
+      mcpToolPolicy = null;
     }
     return true;
   } catch {
@@ -64,7 +71,11 @@ async function loadMcpStore({ replace = false } = {}) {
 
 async function saveMcpStore() {
   const servers = Object.fromEntries(mcpConfigStore.entries());
-  const content = JSON.stringify({ version: 1, servers }, null, 2);
+  const payload = { version: 1, servers };
+  if (mcpToolPolicy && typeof mcpToolPolicy === "object") {
+    payload.tools = mcpToolPolicy;
+  }
+  const content = JSON.stringify(payload, null, 2);
   await fs.writeFile(MCP_STORE_PATH, content, "utf8");
 }
 
@@ -409,6 +420,18 @@ function writeNdjson(res, obj) {
   res.write(`${JSON.stringify(obj)}\n`);
 }
 
+function wantsStructuredOutput(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("tabular") ||
+    text.includes("table") ||
+    text.includes("json") ||
+    text.includes("schema") ||
+    text.includes("rule") ||
+    text.includes("regulation")
+  );
+}
+
 function redactSecrets(value) {
   if (!value || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(redactSecrets);
@@ -670,8 +693,17 @@ app.post("/api/chat", async (req, res) => {
       parts: [{ type: "text", text: message }],
     };
 
+    if (mcpToolPolicy && typeof mcpToolPolicy === "object") {
+      body.tools = mcpToolPolicy;
+    }
+
     if (model && typeof model === "object" && model.providerID && model.modelID) {
       body.model = { providerID: String(model.providerID), modelID: String(model.modelID) };
+    }
+
+    if (wantsStructuredOutput(message)) {
+      body.system =
+        "If the user asks for tabular output, respond strictly as JSON. Use schema: { \"rules\": [ { \"rule_no\": string, \"regulation\": string } ] }. Do not include markdown, code fences, or extra text.";
     }
 
     const normalizedMode = typeof mode === "string" ? mode.trim().toLowerCase() : "ask";
@@ -742,8 +774,17 @@ app.post("/api/chat/stream", async (req, res) => {
       parts: [{ type: "text", text: message.trim() }],
     };
 
+    if (mcpToolPolicy && typeof mcpToolPolicy === "object") {
+      body.tools = mcpToolPolicy;
+    }
+
     if (model && typeof model === "object" && model.providerID && model.modelID) {
       body.model = { providerID: String(model.providerID), modelID: String(model.modelID) };
+    }
+
+    if (wantsStructuredOutput(message)) {
+      body.system =
+        "If the user asks for tabular output, respond strictly as JSON. Use schema: { \"rules\": [ { \"rule_no\": string, \"regulation\": string } ] }. Do not include markdown, code fences, or extra text.";
     }
     const normalizedMode = typeof mode === "string" ? mode.trim().toLowerCase() : "ask";
     if (normalizedMode === "ask") {
@@ -766,6 +807,7 @@ app.post("/api/chat/stream", async (req, res) => {
     let aborted = false;
     let sessionError = null;
     let promptError = null;
+    const seenToolCalls = new Set();
 
     try {
       const subscription = await client.event.subscribe({ signal: abort.signal });
@@ -797,6 +839,21 @@ app.post("/api/chat/stream", async (req, res) => {
             sawDelta = true;
             if (firstDeltaMs === null) firstDeltaMs = Date.now() - t0;
             writeNdjson(res, { type: "delta", text: delta });
+          }
+
+          if (part && part.sessionID === sessionId && part.type === "tool") {
+            const callId = part.callID || part.id || `${part.tool}-${part.messageID || ""}`;
+            if (!seenToolCalls.has(callId)) {
+              seenToolCalls.add(callId);
+            }
+            const status = part.state?.status || "unknown";
+            writeNdjson(res, {
+              type: "tool",
+              callId,
+              tool: part.tool,
+              status,
+              title: part.state?.title,
+            });
           }
         }
 
@@ -836,6 +893,31 @@ app.post("/api/chat/stream", async (req, res) => {
         if (replyText) {
           writeNdjson(res, { type: "delta", text: replyText });
           sawDelta = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Ensure tool calls are surfaced even if tool events were not streamed.
+    if (!abort.signal.aborted) {
+      try {
+        const messages = unwrap(await client.session.messages({ path: { id: sessionId } }));
+        const last = Array.isArray(messages) ? messages[messages.length - 1] : null;
+        const parts = Array.isArray(last?.parts) ? last.parts : [];
+        for (const part of parts) {
+          if (part && part.type === "tool") {
+            const callId = part.callID || part.id || `${part.tool}-${part.messageID || ""}`;
+            if (seenToolCalls.has(callId)) continue;
+            seenToolCalls.add(callId);
+            writeNdjson(res, {
+              type: "tool",
+              callId,
+              tool: part.tool,
+              status: part.state?.status || "unknown",
+              title: part.state?.title,
+            });
+          }
         }
       } catch {
         // ignore

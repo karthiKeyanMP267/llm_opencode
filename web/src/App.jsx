@@ -1,5 +1,238 @@
 import './App.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+function extractBoldNumberedItems(text) {
+  const pattern = /(\*\*\d+(?:\.\d+)*\*\*)/g
+  const parts = String(text || '').split(pattern).map((p) => p.trim()).filter(Boolean)
+  const items = []
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (pattern.test(part)) {
+      const label = part.replace(/\*\*/g, '')
+      const body = parts[i + 1] && !pattern.test(parts[i + 1]) ? parts[i + 1] : ''
+      items.push({ label, body })
+      if (body) i += 1
+    }
+  }
+
+  return items.length > 1 ? items : null
+}
+
+function extractJsonPayload(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+
+  const tryParse = (candidate) => {
+    if (!candidate) return null
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      return null
+    }
+  }
+
+  const fenced = raw.match(/```json\s*([\s\S]*?)\s*```/i) || raw.match(/```\s*([\s\S]*?)\s*```/i)
+  if (fenced && fenced[1]) {
+    const parsed = tryParse(fenced[1])
+    if (parsed) return parsed
+  }
+
+  if ((raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))) {
+    const parsed = tryParse(raw)
+    if (parsed) return parsed
+  }
+
+  const start = raw.search(/[\[{]/)
+  if (start === -1) return null
+  const open = raw[start]
+  const close = open === '{' ? '}' : ']'
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === open) depth += 1
+    if (ch === close) depth -= 1
+    if (depth === 0) {
+      const candidate = raw.slice(start, i + 1)
+      return tryParse(candidate)
+    }
+  }
+
+  return null
+}
+
+function renderStructuredPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null
+
+  if (Array.isArray(payload)) {
+    if (payload.length && payload.every((row) => row && typeof row === 'object')) {
+      const headers = Object.keys(payload[0] || {})
+      if (!headers.length) return null
+      return (
+        <table className="formattedTable">
+          <thead>
+            <tr>
+              {headers.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {payload.map((row, idx) => (
+              <tr key={idx}>
+                {headers.map((h) => (
+                  <td key={h}>{String(row?.[h] ?? '')}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  }
+
+  if (payload.table && typeof payload.table === 'object') {
+    const headers = Array.isArray(payload.table.headers) ? payload.table.headers : []
+    const rows = Array.isArray(payload.table.rows) ? payload.table.rows : []
+    if (headers.length && rows.length) {
+      return (
+        <table className="formattedTable">
+          <thead>
+            <tr>
+              {headers.map((h, idx) => (
+                <th key={idx}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={idx}>
+                {headers.map((_, hIdx) => (
+                  <td key={hIdx}>{String(row?.[hIdx] ?? '')}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  }
+
+  if (Array.isArray(payload.rules)) {
+    const rows = payload.rules
+      .filter((r) => r && typeof r === 'object')
+      .map((r) => ({ rule_no: r.rule_no ?? r.ruleNo ?? r.rule ?? '', regulation: r.regulation ?? r.text ?? '' }))
+    if (rows.length) {
+      return (
+        <table className="formattedTable">
+          <thead>
+            <tr>
+              <th>Rule No</th>
+              <th>Regulation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={idx}>
+                <td>{String(row.rule_no)}</td>
+                <td>{String(row.regulation)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  }
+
+  return null
+}
+
+function renderMarkdown(text) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(text || '')}</ReactMarkdown>
+}
+
+function extractLineItems(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  if (!lines.length) return null
+
+  const numbered = lines.every((l) => /^\d+\.\s+/.test(l))
+  if (numbered) {
+    return { type: 'ol', items: lines.map((l) => l.replace(/^\d+\.\s+/, '')) }
+  }
+
+  const bulleted = lines.every((l) => /^[-*•]\s+/.test(l))
+  if (bulleted) {
+    return { type: 'ul', items: lines.map((l) => l.replace(/^[-*•]\s+/, '')) }
+  }
+
+  return null
+}
+
+function renderMessageText(role, text) {
+  if (role !== 'assistant') return text
+
+  const payload = extractJsonPayload(text)
+  if (payload) {
+    const table = renderStructuredPayload(payload)
+    if (table) {
+      const display = payload.display_text || payload.displayText || payload.message || ''
+      return (
+        <div className="structuredBlock">
+          {display ? <div className="structuredIntro">{renderMarkdown(display)}</div> : null}
+          {table}
+        </div>
+      )
+    }
+  }
+
+  const boldItems = extractBoldNumberedItems(text)
+  if (boldItems) {
+    return (
+      <ul className="formattedList">
+        {boldItems.map((item, idx) => (
+          <li key={idx}>
+            <strong>{item.label}</strong>{item.body ? ` ${item.body}` : ''}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  const lineItems = extractLineItems(text)
+  if (lineItems) {
+    const ListTag = lineItems.type === 'ol' ? 'ol' : 'ul'
+    return (
+      <ListTag className="formattedList">
+        {lineItems.items.map((item, idx) => (
+          <li key={idx}>{item}</li>
+        ))}
+      </ListTag>
+    )
+  }
+
+  return renderMarkdown(text)
+}
 
 function useAutoScroll(dep) {
   const ref = useRef(null)
@@ -148,7 +381,7 @@ function App() {
 
     const optimisticUser = { role: 'user', text }
     const assistantIdx = messages.length + 1
-    setMessages((m) => [...m, optimisticUser, { role: 'assistant', text: '' }])
+    setMessages((m) => [...m, optimisticUser, { role: 'assistant', text: '', tools: [] }])
     setLoading(true)
 
     try {
@@ -180,6 +413,44 @@ function App() {
             next[assistantIdx] = { ...next[assistantIdx], text: (next[assistantIdx].text || '') + evt.text }
             return next
           })
+        }
+        if (evt?.type === 'tool' && evt.tool) {
+          setMessages((m) => {
+            const next = [...m]
+            const cur = next[assistantIdx]
+            if (!cur) return next
+            const tools = Array.isArray(cur.tools) ? [...cur.tools] : []
+            const idx = tools.findIndex((t) => t.callId && t.callId === evt.callId)
+            const payload = {
+              callId: evt.callId,
+              tool: evt.tool,
+              status: evt.status || 'unknown',
+              title: evt.title || '',
+            }
+            if (idx >= 0) {
+              tools[idx] = { ...tools[idx], ...payload }
+            } else {
+              tools.push(payload)
+            }
+            next[assistantIdx] = { ...cur, tools }
+            return next
+          })
+
+          if (evt.status === 'completed' || evt.status === 'error') {
+            const callId = evt.callId
+            setTimeout(() => {
+              setMessages((m) => {
+                const next = [...m]
+                const cur = next[assistantIdx]
+                if (!cur || !Array.isArray(cur.tools)) return next
+                next[assistantIdx] = {
+                  ...cur,
+                  tools: cur.tools.filter((t) => t.callId !== callId),
+                }
+                return next
+              })
+            }, 2000)
+          }
         }
         if (evt?.type === 'assistant_error' && evt.error) {
           const msg =
@@ -296,7 +567,21 @@ function App() {
               <div key={idx} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
                 <div className="bubble">
                   <div className="role">{m.role === 'user' ? 'You' : 'Assistant'}</div>
-                  <div className="text">{m.text}</div>
+                    <div className="text">{renderMessageText(m.role, m.text)}</div>
+                    {m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length ? (
+                      <div className="toolCalls">
+                        <div className="toolCallsTitle">Tools</div>
+                        <div className="toolCallsList">
+                          {m.tools.map((t, tIdx) => (
+                            <div key={`${t.callId || tIdx}`} className={`toolCall ${t.status || 'unknown'}`}>
+                              <span className="toolName">{t.tool}</span>
+                              {t.title ? <span className="toolTitle">{t.title}</span> : null}
+                              <span className="toolStatus">{t.status || 'unknown'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                 </div>
               </div>
             ))}
