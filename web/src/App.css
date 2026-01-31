@@ -414,6 +414,24 @@
   line-height: 1.45;
 }
 
+.text :is(p, ul, ol) {
+  margin: 0 0 6px;
+}
+
+.text :is(p, ul, ol):last-child {
+  margin-bottom: 0;
+}
+
+.text ul,
+.text ol {
+  padding-left: 16px;
+}
+
+.text li {
+  margin: 0;
+  padding: 0;
+}
+
 .formattedList {
   margin: 6px 0 0 18px;
   padding: 0;
