@@ -2,7 +2,6 @@ import './App.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
 
 function extractBoldNumberedItems(text) {
   const pattern = /(\*\*\d+(?:\.\d+)*\*\*)/g
@@ -20,23 +19,6 @@ function extractBoldNumberedItems(text) {
   }
 
   return items.length > 1 ? items : null
-}
-
-function extractBoldHeadingRows(text) {
-  const lines = String(text || '')
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-
-  const rows = []
-  for (const line of lines) {
-    const match = line.match(/^\*\*([^*]+)\*\*\s*[:\-]\s*(.+)$/i)
-    if (match) {
-      rows.push({ heading: match[1].trim(), detail: match[2].trim() })
-    }
-  }
-
-  return rows.length ? rows : null
 }
 
 function extractJsonPayload(text) {
@@ -58,10 +40,43 @@ function extractJsonPayload(text) {
     if (parsed) return parsed
   }
 
-  // Only auto-parse when the entire message is JSON-like, to avoid grabbing free-form text.
   if ((raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))) {
     const parsed = tryParse(raw)
-    if (parsed && typeof parsed === 'object') return parsed
+    if (parsed) return parsed
+  }
+
+  const start = raw.search(/[\[{]/)
+  if (start === -1) return null
+  const open = raw[start]
+  const close = open === '{' ? '}' : ']'
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === open) depth += 1
+    if (ch === close) depth -= 1
+    if (depth === 0) {
+      const candidate = raw.slice(start, i + 1)
+      return tryParse(candidate)
+    }
   }
 
   return null
@@ -127,8 +142,6 @@ function renderStructuredPayload(payload) {
   if (Array.isArray(payload.rules)) {
     const rows = payload.rules.filter((r) => r && typeof r === 'object')
     if (rows.length) {
-      // Gather all keys from all rows to adapt dynamically to the payload shape.
-      const allKeys = Array.from(new Set(rows.flatMap((row) => Object.keys(row || {}))))
       const normalizeKey = (key) => String(key || '').trim()
       const prettyLabel = (key) =>
         normalizeKey(key)
@@ -136,7 +149,11 @@ function renderStructuredPayload(payload) {
           .replace(/\s+/g, ' ')
           .replace(/(^\w|\s\w)/g, (m) => m.toUpperCase())
 
-      const headers = allKeys.map(normalizeKey).filter(Boolean)
+      const firstKeys = Object.keys(rows[0] || {})
+      const preferred = ['rule_no', 'regulation']
+      const orderedKeys = preferred.filter((k) => firstKeys.includes(k))
+      const remaining = firstKeys.filter((k) => !orderedKeys.includes(k))
+      const headers = [...orderedKeys, ...remaining].map(normalizeKey).filter(Boolean)
 
       return (
         <table className="formattedTable">
@@ -165,7 +182,7 @@ function renderStructuredPayload(payload) {
 }
 
 function renderMarkdown(text) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{String(text || '')}</ReactMarkdown>
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(text || '')}</ReactMarkdown>
 }
 
 function extractLineItems(text) {
@@ -188,12 +205,6 @@ function extractLineItems(text) {
 function renderMessageText(role, text) {
   if (role !== 'assistant') return text
 
-  // If the response contains an HTML table, render it directly via markdown
-  if (/<table[\s\S]*?>/i.test(String(text || ''))) {
-    return renderMarkdown(text)
-  }
-
-  // Check for JSON payload with structured data
   const payload = extractJsonPayload(text)
   if (payload) {
     const table = renderStructuredPayload(payload)
@@ -317,7 +328,9 @@ function App() {
   const [providerID, setProviderID] = useState('')
   const [modelID, setModelID] = useState('')
   const [modelsPayload, setModelsPayload] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [abortController, setAbortController] = useState(null)
+  // Agent mode is supported by the backend, but the UI intentionally hides it.
 
   const scrollRef = useAutoScroll(messages.length + (loading ? 1 : 0))
   const providerInfo = useMemo(() => normalizeProviders(modelsPayload), [modelsPayload])
@@ -346,6 +359,7 @@ function App() {
         if (!json?.ok) throw new Error(json?.error || 'Failed to load models')
         setModelsPayload(json.providers)
 
+        // Pick defaults if present.
         const defaults = json.providers?.default
         if (defaults && typeof defaults === 'object') {
           const preferredProvider = defaults.opencode ? 'opencode' : null
@@ -366,7 +380,11 @@ function App() {
     }
   }, [])
 
+
+  // Agents are still supported by the backend, but the UI intentionally hides them.
+
   useEffect(() => {
+    // If provider changes and model isn't in that provider, reset model.
     if (!providerID) return
     if (!modelID) return
     if (!modelOptions.some((m) => m.id === modelID)) setModelID('')
@@ -392,6 +410,7 @@ function App() {
     setMessages(newMessages)
     setLoading(true)
 
+    // Create conversation if new
     if (!currentConvId && messages.length === 0) {
       const convId = Date.now().toString()
       const title = text.slice(0, 40) + (text.length > 40 ? '...' : '')
@@ -404,6 +423,7 @@ function App() {
 
     try {
       const body = { threadId, message: text, mode: 'ask' }
+
       if (providerID && modelID) body.model = { providerID, modelID }
       body.agent = 'general'
 
@@ -486,6 +506,7 @@ function App() {
         }
       }
 
+      // If we ended with no text, show placeholder.
       setMessages((m) => {
         const next = [...m]
         const cur = next[assistantIdx]
@@ -494,8 +515,7 @@ function App() {
         }
         return next
       })
-    } catch (e) {
-      if (e.name === 'AbortError') {
+    } if (e.name === 'AbortError') {
         setMessages((m) => {
           const next = [...m]
           if (next[assistantIdx]) next[assistantIdx] = { ...next[assistantIdx], text: (next[assistantIdx].text || '') + '\n\n_Generation stopped._' }
@@ -514,38 +534,18 @@ function App() {
       setAbortController(null)
     }
   }
-
-  function newChat() {
-    setCurrentConvId(null)
-    setThreadId(null)
-    setMessages([])
-    setError('')
-  }
-
-  function loadConversation(convId) {
-    setCurrentConvId(convId)
-    setMessages([])
-    setThreadId(null)
-    setError('')
-  }
-
-  function deleteConversation(convId, e) {
-    e.stopPropagation()
-    setConversations((prev) => prev.filter((c) => c.id !== convId))
-    if (currentConvId === convId) {
-      newChat()
-    }
-  }
-
-  return (
-    <div className="app">
-      <aside className="sidebar">
+aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebarHeader">
           <button className="btn newChatBtn" onClick={newChat} disabled={loading}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" />
             </svg>
             New chat
+          </button>
+          <button className="btn iconBtn" onClick={() => setSidebarOpen(false)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
           </button>
         </div>
 
@@ -570,82 +570,67 @@ function App() {
           )}
         </div>
 
-        <div className="sidebarFooter">
-          <label className="field">
-            <div className="label">Provider</div>
-            <select className="select" value={providerID} onChange={(e) => setProviderID(e.target.value)} disabled={loading}>
-              <option value="">(default)</option>
-              {providerOptions.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </label>
+        <div className="sidebarFooterId, e) {
+    e.stopPropagation()
+    setConversations((prev) => prev.filter((c) => c.id !== convId))
+    if (currentConvId === convId) {
+      newChat()
+    }[])
+    setError('')
+  }
 
-          <label className="field">
-            <div className="label">Model</div>
-            <select className="select" value={modelID} onChange={(e) => setModelID(e.target.value)} disabled={loading || !providerID}>
-              <option value="">(default)</option>
-              {modelOptions.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </label>
-
-          {error ? <div className="error">{error}</div> : null}
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <div className="dot" />
+          <div>
+            <div className="title">OpenCode Chat</div>
+            <div className="subtitle">Simple local UI</div>
+          </div>
         </div>
+div>
       </aside>
 
       <main className="main">
-        <section className="chat">
-          <div className="messages" ref={scrollRef}>
-            {messages.length === 0 ? (
-              <div className="empty">
-                <div className="emptyTitle">How can I help you today?</div>
-                <div className="emptyHint">Start a conversation by typing a message below</div>
-              </div>
-            ) : null}
+        {!sidebarOpen && (
+          <button className="openSidebarBtn" onClick={() => setSidebarOpen(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+          </button>
+        )}
+        <div className="controls">
+          <button className="btn" onClick={newChat} disabled={loading}>
+            New chat
+          </button>
+        </div>
+      </header>
 
-            {messages.map((m, idx) => (
-              <div key={idx} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
-                <div className="avatar">
-                  {m.role === 'user' ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                  ) : (
+      <main className="main">
+        <aside className="settings">
+          <div className="panelTitle">Settings</div>
+
+          <label className="field">
+            <div className="label">Provider</div>
+            <select
+              className="select"
+              value={providerID}
+              onChange={(e) => setProviderID(e.target.value)}
+              disabled={loading}
+            >
+              <option value="">(default)</option>
+              {providerOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>avatar">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
                     </svg>
-                  )}
-                </div>
-                <div className="bubble">
-                  <div className="text">{renderMessageText(m.role, m.text)}</div>
-                  {m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length ? (
-                    <div className="toolCalls">
-                      <div className="toolCallsTitle">Tools</div>
-                      <div className="toolCallsList">
-                        {m.tools.map((t, tIdx) => (
-                          <div key={`${t.callId || tIdx}`} className={`toolCall ${t.status || 'unknown'}`}>
-                            <span className="toolName">{t.tool}</span>
-                            {t.title ? <span className="toolTitle">{t.title}</span> : null}
-                            <span className="toolStatus">{t.status || 'unknown'}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-
-            {loading ? (
-              <div className="msg assistant">
-                <div className="avatar">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                  </svg>
-                </div>
-                <div className="bubble">
+                  </div>
                   <div className="text">Thinking...</div>
                 </div>
               </div>
@@ -661,7 +646,13 @@ function App() {
                 Stop generating
               </button>
             )}
-            <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+            <form
+              className="composer"
+              onSubmit={(e) => {
+                e.preventDefault()
+                send()
+              }}
+            >
               <textarea
                 className="composerInput"
                 rows={1}
@@ -682,7 +673,63 @@ function App() {
                 </svg>
               </button>
             </form>
+          </divsages.map((m, idx) => (
+              <div key={idx} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
+                <div className="bubble">
+                  <div className="text">{renderMessageText(m.role, m.text)}</div>
+                    {m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length ? (
+                      <div className="toolCalls">
+                        <div className="toolCallsTitle">Tools</div>
+                        <div className="toolCallsList">
+                          {m.tools.map((t, tIdx) => (
+                            <div key={`${t.callId || tIdx}`} className={`toolCall ${t.status || 'unknown'}`}>
+                              <span className="toolName">{t.tool}</span>
+                              {t.title ? <span className="toolTitle">{t.title}</span> : null}
+                              <span className="toolStatus">{t.status || 'unknown'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                </div>
+              </div>
+            ))}
+
+            {loading ? (
+              <div className="msg assistant">
+                <div className="bubble">
+                  <div className="role">Assistant</div>
+                  <div className="text">Streaming…</div>
+                </div>
+              </div>
+            ) : null}
           </div>
+
+          <form
+            className="composer"
+            onSubmit={(e) => {
+              e.preventDefault()
+              send()
+            }}
+          >
+            <textarea
+              className="composerInput"
+              rows={2}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Message"
+              disabled={loading}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  send()
+                }
+              }}
+            />
+            <button className="btn primary" type="submit" disabled={loading || !input.trim()}>
+              Send
+            </button>
+          </form>
         </section>
       </main>
     </div>

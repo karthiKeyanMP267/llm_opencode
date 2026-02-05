@@ -1,4 +1,7 @@
 # dependencies
 node_modules/
 
+# env
+.env
+
 # optional: lockfiles in subprojects (kept)

@@ -14,12 +14,20 @@
     "skill": false
   },
   "servers": {
-    "mcp-db": {
-      "type": "remote",
-      "url": "http://127.0.0.1:1000/mcp",
-      "enabled": true,
-      "timeout": 5000
-    }
+      "day8-syllabus": {
+        "type": "local",
+        "command": [
+          "C:/Users/karthikeyan/AppData/Local/Programs/Python/Python312/Scripts/chroma-mcp-server.exe",
+          "--client-type",
+          "persistent",
+          "--data-dir",
+          "D:/chromadb/llmAgent/day8/chroma_data"
+        ],
+        "environment": {
+          "CHROMA_CLIENT_TYPE": "persistent",
+          "CHROMA_DATA_DIR": "D:/chromadb/llmAgent/day8/chroma_data"
+        },
+        "enabled": true
   }
-
+}
 }

@@ -19,6 +19,18 @@ npm run dev
 - Web UI: http://localhost:5173
 - API: http://localhost:8787/api/health
 
+## Provider API keys (.env)
+
+Create a .env file at the repo root (see [.env.example](.env.example)) and add provider keys like:
+
+- OPENAI_API_KEY
+- ANTHROPIC_API_KEY
+- GROQ_API_KEY
+- GOOGLE_API_KEY
+- MISTRAL_API_KEY
+
+The server loads .env on startup and passes these to OpenCode automatically.
+
 ## Notes
 
 - The backend starts an OpenCode server via the OpenCode CLI (`opencode-ai`).

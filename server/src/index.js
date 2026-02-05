@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createOpencodeClient } from "@opencode-ai/sdk";
@@ -703,7 +704,7 @@ app.post("/api/chat", async (req, res) => {
 
     if (wantsStructuredOutput(message)) {
       body.system =
-        "If the user asks for tabular output, respond strictly as JSON. Use schema: { \"rules\": [ { \"rule_no\": string, \"regulation\": string } ] }. Do not include markdown, code fences, or extra text.";
+        "If the user asks for tabular output, respond with an HTML <table> element containing appropriate columns based on the data. Use <thead> for headers and <tbody> for rows. Choose column names that match the actual content (e.g., Grade, Travel Mode, Metro DA, Other DA, Duration, etc.). Do not use a fixed schema. Do not include markdown code fences.";
     }
 
     const normalizedMode = typeof mode === "string" ? mode.trim().toLowerCase() : "ask";
@@ -784,7 +785,7 @@ app.post("/api/chat/stream", async (req, res) => {
 
     if (wantsStructuredOutput(message)) {
       body.system =
-        "If the user asks for tabular output, respond strictly as JSON. Use schema: { \"rules\": [ { \"rule_no\": string, \"regulation\": string } ] }. Do not include markdown, code fences, or extra text.";
+        "If the user asks for tabular output, respond with an HTML <table> element containing appropriate columns based on the data. Use <thead> for headers and <tbody> for rows. Choose column names that match the actual content (e.g., Grade, Travel Mode, Metro DA, Other DA, Duration, etc.). Do not use a fixed schema. Do not include markdown code fences.";
     }
     const normalizedMode = typeof mode === "string" ? mode.trim().toLowerCase() : "ask";
     if (normalizedMode === "ask") {
