@@ -1,0 +1,18 @@
+if env needed create it then run step by step
+
+
+pip install -r .\requirements.txt
+
+python .\ingest_json_to_chroma.py
+
+python .\check_environment.py    
+(if success move to next )
+
+python .\test_connection.py 
+(if success move to next )
+
+
+use claude_desktop_config.json  as an example and update it in claude config use youtube or chatgpt to do it upload the readme file to get the steps to do it
+
+python .\mcp_chroma_server.py
+(after running check on claude desktop if tools is running then ask for list all tools if ok then ask questions and verify)

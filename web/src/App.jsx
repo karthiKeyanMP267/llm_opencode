@@ -1,8 +1,11 @@
 import './App.css'
+import 'katex/dist/katex.min.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
+import rehypeKatex from 'rehype-katex'
 
 function extractBoldNumberedItems(text) {
   const pattern = /(\*\*\d+(?:\.\d+)*\*\*)/g
@@ -165,7 +168,12 @@ function renderStructuredPayload(payload) {
 }
 
 function renderMarkdown(text) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{String(text || '')}</ReactMarkdown>
+  // Enable GitHub-flavored markdown + LaTeX math (inline $...$ and block $$...$$)
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>
+      {String(text || '')}
+    </ReactMarkdown>
+  )
 }
 
 function extractLineItems(text) {
@@ -307,7 +315,14 @@ function parseKeyValueLines(text) {
 }
 
 function App() {
-  const [conversations, setConversations] = useState([])
+  const [conversations, setConversations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kec-conversations')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [currentConvId, setCurrentConvId] = useState(null)
   const [threadId, setThreadId] = useState(null)
   const [messages, setMessages] = useState([])
@@ -321,6 +336,25 @@ function App() {
 
   const scrollRef = useAutoScroll(messages.length + (loading ? 1 : 0))
   const providerInfo = useMemo(() => normalizeProviders(modelsPayload), [modelsPayload])
+
+  // Persist conversations to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('kec-conversations', JSON.stringify(conversations))
+    } catch (e) {
+      console.error('Failed to save conversations:', e)
+    }
+  }, [conversations])
+
+  // Save current conversation messages
+  useEffect(() => {
+    if (!currentConvId || messages.length === 0) return
+    try {
+      localStorage.setItem(`kec-messages-${currentConvId}`, JSON.stringify({ messages, threadId }))
+    } catch (e) {
+      console.error('Failed to save messages:', e)
+    }
+  }, [currentConvId, messages, threadId])
 
   const providerOptions = useMemo(() => {
     return (providerInfo.providers || [])
@@ -453,22 +487,6 @@ function App() {
             next[assistantIdx] = { ...cur, tools }
             return next
           })
-
-          if (evt.status === 'completed' || evt.status === 'error') {
-            const callId = evt.callId
-            setTimeout(() => {
-              setMessages((m) => {
-                const next = [...m]
-                const cur = next[assistantIdx]
-                if (!cur || !Array.isArray(cur.tools)) return next
-                next[assistantIdx] = {
-                  ...cur,
-                  tools: cur.tools.filter((t) => t.callId !== callId),
-                }
-                return next
-              })
-            }, 2000)
-          }
         }
         if (evt?.type === 'assistant_error' && evt.error) {
           const msg =
@@ -524,14 +542,32 @@ function App() {
 
   function loadConversation(convId) {
     setCurrentConvId(convId)
-    setMessages([])
-    setThreadId(null)
     setError('')
+    try {
+      const saved = localStorage.getItem(`kec-messages-${convId}`)
+      if (saved) {
+        const data = JSON.parse(saved)
+        setMessages(data.messages || [])
+        setThreadId(data.threadId || null)
+      } else {
+        setMessages([])
+        setThreadId(null)
+      }
+    } catch (e) {
+      console.error('Failed to load conversation:', e)
+      setMessages([])
+      setThreadId(null)
+    }
   }
 
   function deleteConversation(convId, e) {
     e.stopPropagation()
     setConversations((prev) => prev.filter((c) => c.id !== convId))
+    try {
+      localStorage.removeItem(`kec-messages-${convId}`)
+    } catch (e) {
+      console.error('Failed to delete conversation messages:', e)
+    }
     if (currentConvId === convId) {
       newChat()
     }
@@ -539,7 +575,12 @@ function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <div className="topLine"></div>
+      <div className="appContent">
+        <aside className="sidebar">
+          <div className="logoContainer">
+            <img src="/kec-logo.png" alt="KEC - Kongu Engineering College" className="logo" />
+          </div>
         <div className="sidebarHeader">
           <button className="btn newChatBtn" onClick={newChat} disabled={loading}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -601,7 +642,27 @@ function App() {
             {messages.length === 0 ? (
               <div className="empty">
                 <div className="emptyTitle">How can I help you today?</div>
-                <div className="emptyHint">Start a conversation by typing a message below</div>
+                <form className="composerCentered" onSubmit={(e) => { e.preventDefault(); send(); }}>
+                  <textarea
+                    className="composerInput"
+                    rows={1}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask here"
+                    disabled={loading}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        send()
+                      }
+                    }}
+                  />
+                  <button type="submit" className="composerBtn sendBtn" disabled={!input.trim()} title="Send message">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                  </button>
+                </form>
               </div>
             ) : null}
 
@@ -609,82 +670,82 @@ function App() {
               <div key={idx} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
                 <div className="avatar">
                   {m.role === 'user' ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="8" r="4"/>
+                      <path d="M20 21a8 8 0 1 0-16 0"/>
                     </svg>
                   ) : (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                      <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/>
                     </svg>
                   )}
                 </div>
                 <div className="bubble">
-                  <div className="text">{renderMessageText(m.role, m.text)}</div>
-                  {m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length ? (
-                    <div className="toolCalls">
-                      <div className="toolCallsTitle">Tools</div>
-                      <div className="toolCallsList">
-                        {m.tools.map((t, tIdx) => (
-                          <div key={`${t.callId || tIdx}`} className={`toolCall ${t.status || 'unknown'}`}>
-                            <span className="toolName">{t.tool}</span>
-                            {t.title ? <span className="toolTitle">{t.title}</span> : null}
-                            <span className="toolStatus">{t.status || 'unknown'}</span>
+                  {m.role === 'assistant' && !m.text && loading && idx === messages.length - 1 ? (
+                    <div className="thinkingBlock">
+                      <div className="thinkingHeader">
+                        <span className="thinkingSpinner"></span>
+                        Thinking
+                      </div>
+                      <div className="thinkingContent">
+                        {Array.isArray(m.tools) && m.tools.length > 0 ? (
+                          m.tools.map((t, tIdx) => (
+                            <div key={`${t.callId || tIdx}`} className="thinkingItem">
+                              <span className="thinkingBullet">●</span>
+                              <span className="thinkingText">{t.title || t.tool || 'Processing...'}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="thinkingItem">
+                            <span className="thinkingBullet">●</span>
+                            <span className="thinkingText">Processing your request...</span>
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
                   ) : null}
+                  {m.text ? <div className="text">{renderMessageText(m.role, m.text)}</div> : null}
                 </div>
               </div>
             ))}
-
-            {loading ? (
-              <div className="msg assistant">
-                <div className="avatar">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                  </svg>
-                </div>
-                <div className="bubble">
-                  <div className="text">Thinking...</div>
-                </div>
-              </div>
-            ) : null}
           </div>
 
-          <div className="composerWrapper">
-            {loading && (
-              <button className="btn stopBtn" onClick={stopGeneration}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-                Stop generating
-              </button>
-            )}
-            <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-              <textarea
-                className="composerInput"
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Message OpenCode..."
-                disabled={loading}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    send()
-                  }
-                }}
-              />
-              <button className="btn sendBtn" type="submit" disabled={loading || !input.trim()}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                </svg>
-              </button>
-            </form>
-          </div>
+          {messages.length > 0 && (
+            <div className="composerWrapper">
+              <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+                <textarea
+                  className="composerInput"
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask here"
+                  disabled={loading}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      send()
+                    }
+                  }}
+                />
+                {loading ? (
+                  <button type="button" className="composerBtn stopBtn" onClick={stopGeneration} title="Stop generating">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button type="submit" className="composerBtn sendBtn" disabled={!input.trim()} title="Send message">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                  </button>
+                )}
+              </form>
+            </div>
+          )}
         </section>
       </main>
+      </div>
     </div>
   )
 }
