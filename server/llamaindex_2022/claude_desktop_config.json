@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "kec_syllabi": {
+      "command": "python",
+      "args": [
+        "C:/Users/vikym/Documents/GitHub/llmAgent/llamaindex_2022/mcp_server.py"
+      ]
+    }
+  }
+}
