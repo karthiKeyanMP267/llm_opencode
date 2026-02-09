@@ -25,6 +25,12 @@
       "url": "http://127.0.0.1:3001/sse",
       "enabled": true,
       "timeout": 5000
+    },
+    "llama_2022": {
+      "type":"remote",
+      "url": "http://localhost:8000/mcp",
+      "enabled": true,
+      "timeout": 5000
     }
 
 }
